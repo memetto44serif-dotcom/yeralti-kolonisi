@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Yeraltı Kolonisi — Karınca İmparatorluğu</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%;background:#070a06;overflow:hidden;
+    font-family:"Segoe UI",Tahoma,sans-serif;color:#e9dcc2;user-select:none}
+  #game{display:block;width:100vw;height:100vh;cursor:crosshair}
+  #ui{position:fixed;inset:0;pointer-events:none}
+  .panel{position:absolute;background:rgba(24,17,10,.93);border:1px solid #5c4326;
+    border-radius:7px;pointer-events:auto;box-shadow:0 4px 18px rgba(0,0,0,.5)}
+
+  /* ---------- üst çubuk ---------- */
+  #top{top:6px;left:6px;padding:6px 12px;display:flex;gap:14px;align-items:center;font-size:14px}
+  #top b{color:#ffd98a;font-weight:700}
+  .res{display:flex;align-items:center;gap:5px;white-space:nowrap}
+  .res .ic{font-size:14px}
+  .sep{width:1px;height:20px;background:#4a3620}
+  #ageBox{color:#ffcf7a;font-weight:600}
+  #envBox{opacity:.85;font-size:13px}
+
+  /* ---------- mini harita ---------- */
+  #mini{top:6px;right:6px;padding:5px}
+  #minimap{display:block;image-rendering:pixelated;border:1px solid #3a2a18;cursor:pointer;border-radius:3px}
+  #alerts{position:absolute;top:128px;right:6px;width:238px;display:flex;flex-direction:column;gap:3px;pointer-events:none}
+  .alert{background:rgba(60,20,12,.9);border-left:3px solid #e4645a;padding:4px 8px;font-size:12px;border-radius:3px}
+  .alert.ok{background:rgba(26,46,20,.9);border-color:#8fc45a}
+
+  /* ---------- alt panel ---------- */
+  #bottom{bottom:6px;left:6px;right:6px;height:146px;display:flex;gap:8px;padding:7px}
+  #info{width:252px;border-right:1px solid #4a3620;padding-right:8px;font-size:12.5px;line-height:1.42;overflow:auto}
+  #info h3{margin:0 0 3px;font-size:15px;color:#ffd98a}
+  #info .stat{display:inline-block;margin-right:9px;opacity:.9}
+  #portrait{float:right;width:52px;height:52px;background:#120d07;border:1px solid #5c4326;border-radius:5px}
+  #center{flex:1;display:flex;flex-direction:column;gap:5px;min-width:0}
+  #tabs{display:flex;gap:4px}
+  .tab{padding:3px 11px;font-size:12px;background:#2a1e12;border:1px solid #5c4326;border-radius:4px;
+    cursor:pointer;color:#c9b894}
+  .tab.on{background:#4b3519;color:#ffd98a;border-color:#b98a46}
+  #cmds{flex:1;display:flex;flex-wrap:wrap;gap:5px;align-content:flex-start;overflow:auto;padding-right:4px}
+  .btn{width:124px;min-height:58px;background:#2c2014;border:1px solid #6b4e2b;border-radius:5px;
+    color:#e9dcc2;font-size:11px;text-align:left;padding:4px 6px;cursor:pointer;line-height:1.3;position:relative}
+  .btn:hover{background:#44301b;border-color:#b98a46}
+  .btn.off{opacity:.4;cursor:not-allowed}
+  .btn.on{border-color:#ffd98a;background:#4b3519}
+  .btn b{display:block;font-size:12px;color:#ffd98a}
+  .btn .c{display:block;color:#9fd07a;font-size:10px;margin:1px 0}
+  .btn .k{position:absolute;top:3px;right:5px;color:#d8a24a;font-size:10px}
+  .btn .lock{color:#e4846a;font-size:10px}
+  #side{width:150px;border-left:1px solid #4a3620;padding-left:8px;display:flex;flex-direction:column;gap:4px}
+  .mini-btn{background:#2c2014;border:1px solid #6b4e2b;border-radius:4px;color:#e9dcc2;font-size:11px;
+    padding:4px 6px;cursor:pointer;text-align:left}
+  .mini-btn:hover{background:#44301b}
+  .mini-btn.on{border-color:#ffd98a;color:#ffd98a}
+  #queue{position:absolute;bottom:158px;left:6px;display:flex;gap:3px;flex-wrap:wrap;max-width:60vw}
+  .qi{width:38px;height:38px;background:rgba(24,17,10,.92);border:1px solid #6b4e2b;border-radius:4px;
+    font-size:9px;display:flex;align-items:flex-end;justify-content:center;position:relative;overflow:hidden;color:#e9dcc2}
+  .qi i{position:absolute;left:0;bottom:0;width:100%;background:#5d8a3a;opacity:.45}
+  #msg{position:absolute;top:92px;left:50%;transform:translateX(-50%);font-size:16px;
+    color:#ffcf7a;text-shadow:0 2px 6px #000;text-align:center}
+  #tip{position:fixed;display:none;max-width:280px;background:rgba(18,12,7,.97);border:1px solid #7a5a30;
+    border-radius:5px;padding:7px 9px;font-size:12px;line-height:1.45;z-index:9;pointer-events:none}
+  #tip b{color:#ffd98a}
+
+  /* ---------- ekranlar ---------- */
+  .screen{position:fixed;inset:0;background:rgba(7,10,6,.93);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:14px;z-index:8;pointer-events:auto}
+  .screen h1{font-size:40px;margin:0;color:#ffd98a}
+  .screen .box{max-width:860px;line-height:1.6;font-size:14px;background:rgba(24,17,10,.95);
+    border:1px solid #5c4326;border-radius:8px;padding:20px 24px}
+  .screen button{padding:9px 22px;font-size:15px;background:#6b4e2b;color:#fff;border:0;border-radius:6px;cursor:pointer}
+  .screen button:hover{background:#8a6436}
+  kbd{background:#3a2a18;border:1px solid #6b4e2b;border-radius:3px;padding:1px 5px;font-size:11.5px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:4px 22px;margin-top:6px}
+  .diff{display:flex;gap:10px;justify-content:center;margin-top:10px}
+  .diff div{padding:8px 16px;border:1px solid #6b4e2b;border-radius:6px;cursor:pointer;background:#2c2014}
+  .diff div.on{border-color:#ffd98a;background:#4b3519;color:#ffd98a}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="ui">
+  <div class="panel" id="top"></div>
+  <div class="panel" id="mini"><canvas id="minimap" width="238" height="108"></canvas></div>
+  <div id="alerts"></div>
+  <div id="msg"></div>
+  <div id="queue"></div>
+  <div class="panel" id="bottom">
+    <div id="info"></div>
+    <div id="center"><div id="tabs"></div><div id="cmds"></div></div>
+    <div id="side"></div>
+  </div>
+</div>
+<div id="tip"></div>
+
+<div class="screen" id="intro"><div class="box">
+  <h1>🐜 Karınca İmparatorluğu</h1>
+  <p>Toprağın altında bir koloni kur: tünel kaz, oda inşa et, <b>dört kaynağı</b> işle, <b>dört çağ</b> boyunca
+  gelişip kızıl koloninin Kraliçe Odası'nı yok et. Kendi kraliçeni kaybedersen koloni söner.</p>
+  <div class="cols">
+    <div>🍃 <b>Yiyecek</b> — yapraklar, leşler, mantar çiftliği</div>
+    <div>🍂 <b>Lif</b> — yüzeydeki bitkiler (Yaprak Kesen toplar)</div>
+    <div>💎 <b>Mineral</b> — toprağı kazarken, parlak damarlarda bol</div>
+    <div>🍯 <b>Bal Şebnemi</b> — yaprak bitleri (Çoban sağar)</div>
+  </div>
+  <p style="margin-top:12px">
+    <kbd>Sol tık / sürükle</kbd> seç &nbsp; <kbd>Sağ tık</kbd> git · saldır · <b>toprağa = kaz</b> · kaynağa = topla<br>
+    <kbd>Sağ tık sürükle</kbd> alan kazma emri &nbsp; <kbd>B</kbd> inşa menüsü &nbsp;
+    <kbd>Y</kbd> Kraliçe Odası (çağ yükseltme) &nbsp; <kbd>Ctrl+1–9</kbd> grup kur · <kbd>1–9</kbd> grubu çağır<br>
+    <kbd>WASD</kbd>/kenar kamera · <kbd>Tekerlek</kbd> zoom · <kbd>Boşluk</kbd> yuva ·
+    <kbd>.</kbd> boş işçi · <kbd>Ctrl+A</kbd> tüm ordu · <kbd>F</kbd> hız · <kbd>P</kbd> duraklat
+  </p>
+  <p style="color:#9fd07a;margin:6px 0 0">İşçiler boş kaldığında kazma, inşa ve toplama işlerini kendileri üstlenir.
+  Her kast farklı kaynağı toplar: İşçi → yiyecek, Yaprak Kesen → lif, Çoban → bal şebnemi.</p>
+  <div class="diff" id="diffSel"></div>
+  <div style="text-align:center;margin-top:14px"><button id="startBtn">Koloniyi Kur</button></div>
+</div></div>
+
+<div class="screen" id="over" style="display:none">
+  <h1 id="overT"></h1><div id="overS" style="font-size:16px"></div>
+  <button onclick="location.reload()">Yeniden Oyna</button>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/world.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
