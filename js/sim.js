@@ -28,9 +28,10 @@ function edgeDist(px,py,b){
   const cx=clamp(px,b.tx,b.tx+b.d.w), cy=clamp(py,b.ty,b.ty+b.d.h);
   return Math.hypot(px-cx,py-cy);
 }
-function bldAt(x,y){ if(!inB(x,y))return null; const i=bgrid[ti(x,y)]; return i?blds.find(b=>b.id===i):null; }
+let bldById=new Map();
+function bldAt(x,y){ if(!inB(x,y))return null; const i=bgrid[ti(x,y)]; return i?(bldById.get(i)||null):null; }
 function gateAt(x,y){ const b=bldAt(x,y); return b&&b.d.gate&&b.built>=1?b:null; }
-function regrid(){ bgrid.fill(0);
+function regrid(){ bgrid.fill(0); bldById.clear(); for(const b of blds) bldById.set(b.id,b);
   for(const b of blds) for(let y=b.ty;y<b.ty+b.d.h;y++)for(let x=b.tx;x<b.tx+b.d.w;x++)
     if(inB(x,y)) bgrid[ti(x,y)]=b.id; }
 
@@ -71,6 +72,36 @@ function popCap(t){ let c=0; for(const b of blds) if(b.team===t&&b.built>=1) c+=
   return Math.min(c,120); }
 
 // ------------------------------------------------------------ teknoloji
+// AoE kuralı: çağ atlamak için mevcut çağdan en az 2 oda dikilmiş olmalı
+function ageBuildingsOf(team){
+  const T=st.teams[team]; let c=0;
+  for(const b of blds) if(b.team===team&&b.built>=1&&b.d.age===T.age&&b.type!=='nest') c++;
+  return c;
+}
+const AGE_REQ=2;
+function ageReqMet(team){ return ageBuildingsOf(team)>=AGE_REQ; }
+
+// ------------------------------------------------------------ takas odası (AoE market mantığı)
+// her kaynak yiyecek karşılığı alınıp satılır; bolluk fiyatı düşürür
+function marketRate(res){
+  const base={f:1, l:1.1, m:1.35, d:2.2};
+  const have=P.res[res]||0;
+  return base[res]*(1+clamp((300-have)/600,-0.35,0.6));
+}
+function marketSell(res,amount){
+  amount=amount||100;
+  if(P.res[res]<amount){ msg('Satacak kadar '+RESL.find(r=>r.k===res).n+' yok'); return; }
+  P.res[res]-=amount; P.res.f+=amount*marketRate(res)*0.85;
+  msg(amount+' '+RESL.find(r=>r.k===res).n+' satıldı');
+}
+function marketBuy(res,amount){
+  amount=amount||100;
+  const cost=amount*marketRate(res)*1.15;
+  if(P.res.f<cost){ msg('Yetersiz yiyecek ('+Math.round(cost)+' gerekli)'); return; }
+  P.res.f-=cost; P.res[res]+=amount;
+  msg(amount+' '+RESL.find(r=>r.k===res).n+' alındı');
+}
+
 function techReady(team,id){
   const T=st.teams[team], tk=TECHS[id];
   if(tk.agetech) return T.age===tk.agetech-1 && !T.tech[id];
@@ -108,6 +139,8 @@ function order(u,gx,gy,adj){
   if(p){ u.path=p; u.pi=Math.min(1,p.length-1); return true; }
   u.path=null; return false;
 }
+let auraBlds=[];
+function refreshAuras(){ auraBlds=blds.filter(b=>b.d.aura&&b.built>=1); }
 function unitSpd(u){
   const T=st.teams[u.team];
   let s=u.d.spd*(1+(T?T.eff.spd:0));
@@ -118,8 +151,7 @@ function unitSpd(u){
     if(!u.wild && phero[i]>0.25) s*=1.12;
   }
   if(!u.wild && isNight() && (u.y|0)<surfH[clamp(u.x|0,0,MW-1)]+2) s*=0.8;  // gece yüzeyde yavaş
-  for(const b of blds) if(b.d.aura&&b.team===u.team&&b.built>=1&&Math.hypot(b.x-u.x,b.y-u.y)<b.d.aura.r)
-    { s*=1+b.d.aura.spd; break; }
+  for(const b of auraBlds) if(b.team===u.team&&Math.hypot(b.x-u.x,b.y-u.y)<b.d.aura.r){ s*=1+b.d.aura.spd; break; }
   return s;
 }
 function moveAlong(u,dt){
@@ -143,8 +175,26 @@ function moveAlong(u,dt){
   }
   return u.path!==null;
 }
+let sepGrid=new Map();
+function buildSepGrid(){
+  sepGrid.clear();
+  for(const u of units){
+    if(u.wild) continue;
+    const k=((u.y|0)*MW+(u.x|0));
+    let a=sepGrid.get(k); if(!a){ a=[]; sepGrid.set(k,a); }
+    a.push(u);
+  }
+}
+function nearbyUnits(u){
+  const out=[], bx=u.x|0, by=u.y|0;
+  for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
+    const a=sepGrid.get(((by+dy)*MW+(bx+dx)));
+    if(a) for(const o of a) out.push(o);
+  }
+  return out;
+}
 function separate(u){
-  for(const o of units){ if(o===u||o.team!==u.team||o.wild)continue;
+  for(const o of nearbyUnits(u)){ if(o===u||o.team!==u.team||o.wild)continue;
     const dx=o.x-u.x, dy=o.y-u.y, d2=dx*dx+dy*dy;
     if(d2<0.36&&d2>1e-4){ const d=Math.sqrt(d2), f=(0.6-d)*0.32;
       if(passable((u.x-dx/d*f)|0,(u.y-dy/d*f)|0,u.team)){ u.x-=dx/d*f; u.y-=dy/d*f; } } }
@@ -199,8 +249,7 @@ function dmgOf(u,tg){
   if(T&&T.eff.rage&&T.under>0) d*=1.25;
   if(u.type==='spitter') d*=1+(T?T.eff.acid*0.5:0);
   if(tg.tx&&u.d.vsBld) d*=u.d.vsBld;
-  for(const b of blds) if(b.d.aura&&b.team===u.team&&b.built>=1&&Math.hypot(b.x-u.x,b.y-u.y)<b.d.aura.r)
-    { d*=1+b.d.aura.dmg; break; }
+  for(const b of auraBlds) if(b.team===u.team&&Math.hypot(b.x-u.x,b.y-u.y)<b.d.aura.r){ d*=1+b.d.aura.dmg; break; }
   return d;
 }
 function attack(u,tg,dt){
@@ -273,6 +322,7 @@ function claimJob(u){
     for(const n of nodes){ if(n.a<=0||n.bad>=3||n.res!==want)continue;
       if(n.kind==='aphid'&&u.type!=='herder')continue;
       if(home && Math.hypot(home.x-n.x,home.y-n.y)>72) continue;
+      if(isNight() && n.y < surfH[clamp(n.x|0,0,MW-1)]+3) continue;   // gece yüzeye çıkılmaz
       const d=Math.hypot(u.x-n.x,u.y-n.y)+n.w*5;
       if(d<bd){bd=d;best=n;} }
     if(best){ best.w++; u.job={k:'gather',n:best}; return; }
@@ -362,6 +412,7 @@ function updUnit(u,dt){
     if(Math.random()<dt*6) parts.push({x:t.x+0.5,y:t.y+0.5,vx:rnd(-1.4,1.4),vy:rnd(-2,-.3),l:.4,c:'#6b4e2b'});
     if(t.p>=1){
       const y=digYield(tt); for(const k in y) st.teams[u.team].res[k]+=y[k];
+      if(u.team===PLAYER) st.dug=(st.dug||0)+1;
       setTile(t.x,t.y,T_TUN);
       removeDig(u.team,t.x,t.y); dropJob(u);
     }
@@ -503,6 +554,7 @@ function updBld(b,dt){
   if(b.q.length){
     const it=b.q[0], d=ANTS[it.type];
     let sp=1+T.eff.trainSpd; if(it.type==='armyant') sp*=1+T.eff.swarm;
+    for(const q of units) if(q.type==='queen'&&q.team===b.team&&Math.hypot(q.x-b.x,q.y-b.y)<13){ sp*=1.25; break; }
     it.p+=dt/d.t*sp;
     if(it.p>=1){
       b.q.shift();
@@ -518,15 +570,21 @@ function updBld(b,dt){
 }
 
 // ------------------------------------------------------------ yerleştirme
+// AoE mantığı: keşfedilmiş her yere kurulabilir; yalnız zemin kazılmış ve boş olmalı
 function canPlaceAt(tx,ty,d,team){
   for(let y=ty;y<ty+d.h;y++)for(let x=tx;x<tx+d.w;x++){
     if(!inB(x,y)) return false;
     const t=tiles[ti(x,y)];
     if(t!==T_TUN&&t!==T_WATER) return false;
     if(bgrid[ti(x,y)]) return false;
+    if(team===PLAYER && !known[ti(x,y)]) return false;     // keşfedilmemiş alana kurulmaz
   }
-  for(const b of blds) if(b.team===team&&Math.hypot(b.x-tx,b.y-ty)<34) return true;
-  return false;
+  // gerçekçilik: mantar çiftliği nemli derinlikte olmalı
+  if(d.needs==='l' || d.id==='farm'){
+    const sh=surfH[clamp(tx,0,MW-1)];
+    if(ty < sh+10) return false;
+  }
+  return true;
 }
 
 // ------------------------------------------------------------ doğal yaşam & kaynak döngüsü
@@ -603,7 +661,7 @@ function simulate(dt){
   st.time+=dt; pfBudget=70;
   P.idle=0; E.idle=0;
   if(P.under>0) P.under-=dt; if(E.under>0) E.under-=dt;
-  updateEnv(dt); pheroDecay(dt);
+  updateEnv(dt); pheroDecay(dt); refreshAuras(); buildSepGrid();
   for(let i=0;i<units.length;i++) updUnit(units[i],dt);
   for(const b of blds) updBld(b,dt);
   for(let i=shots.length-1;i>=0;i--){ const s=shots[i]; s.t+=dt*4.2;

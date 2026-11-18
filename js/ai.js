@@ -28,7 +28,7 @@ function enemyAI(dt){
   // ---- çağ yükseltme
   if(nest&&!nest.rq&&nest.q.length===0){
     const next=T.age===1?'age2':(T.age===2?'age3':(T.age===3?'age4':null));
-    if(next&&techReady(ENEMY,next)&&g>45*T.age){
+    if(next&&techReady(ENEMY,next)&&ageReqMet(ENEMY)&&g>45*T.age){
       const c=techCost(ENEMY,next);
       for(const k in c) c[k]=Math.round(c[k]*0.7);      // yapay zekâ indirimi
       if(canPay(ENEMY,c)){ pay(ENEMY,c); nest.rq={id:next,p:0,t:TECHS[next].t*0.7}; }
@@ -39,7 +39,8 @@ function enemyAI(dt){
   if(ai.bt<=0){
     ai.bt=rnd(20,32)/D.inc;
     let want=null;
-    if(aiHave('brood')<2) want='brood';
+    if(popCap(ENEMY)-popOf(ENEMY)<6) want='house';          // nüfus sınırı yaklaşınca ev
+    else if(aiHave('brood')<2) want='brood';
     else if(aiHave('farm')<2) want='farm';
     else if(T.age>=2&&aiHave('barracks')<1) want='barracks';
     else if(T.age>=2&&aiHave('aphid')<1) want='aphid';

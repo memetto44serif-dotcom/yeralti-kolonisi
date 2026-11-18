@@ -87,5 +87,6 @@ window.G={
     initGame(); started=true; return 'ok'; },
   speed:v=>{ st.speed=v; }, tiles:(x,y)=>tiles[ti(x,y)], addDig, canPlaceAt, mkBld, mkUnit, mkWild,
   train, research, order, popOf, popCap, techReady, techCost, centerOn, BLDS, ANTS, TECHS,
+  ageBuildingsOf, ageReqMet, marketRate, marketSell, marketBuy, AGE_REQ, selectIdle, toggleHelp,
   time:()=>st.time, over:()=>st.over
 };

@@ -11,7 +11,25 @@ const TRAINK=['Q','W','E','R','T'], TECHK=['Z','X','C','V'];
 const $=id=>document.getElementById(id);
 
 function msg(t){ $('msg').textContent=t; msgT=2.6; }
-function addAlert(t,cls){ alerts.unshift({t,cls:cls||'',life:7}); if(alerts.length>5) alerts.pop(); }
+function addAlert(t,cls,x,y){ alerts.unshift({t,cls:cls||'',life:9,x,y}); if(alerts.length>5) alerts.pop(); }
+function jumpAlert(i){ const a=alerts[i]; if(a&&a.x!==undefined){ centerOn(a.x,a.y); msg('Olay yerine gidildi'); } }
+// kaynak geliri ölçümü (son 10 sn)
+let incSamples=[], incRate={f:0,l:0,m:0,d:0};
+function trackIncome(dt){
+  incSamples.push({t:st.time, f:P.res.f, l:P.res.l, m:P.res.m, d:P.res.d});
+  while(incSamples.length>2 && st.time-incSamples[0].t>10) incSamples.shift();
+  const a=incSamples[0], b=incSamples[incSamples.length-1], dtp=b.t-a.t;
+  if(dtp>2) for(const k of ['f','l','m','d']) incRate[k]=Math.max(0,(b[k]-a[k])/dtp*60);
+}
+// oyunun ilk dakikaları için hedef listesi
+const GOALS=[
+  {id:'dig',  t:'20 kare toprak kaz',           ok:()=>st.dug>=20},
+  {id:'work', t:'10 işçi/kesen yetiştir',       ok:()=>units.filter(u=>u.team===PLAYER&&u.d.work).length>=10},
+  {id:'house',t:'Yavru Odacığı kur (nüfus)',    ok:()=>blds.some(b=>b.team===PLAYER&&b.type==='house'&&b.built>=1)},
+  {id:'farm', t:'Mantar Çiftliği kur',          ok:()=>blds.some(b=>b.team===PLAYER&&b.type==='farm'&&b.built>=1)},
+  {id:'age',  t:'Çağ II: Büyüyen Koloni',       ok:()=>P.age>=2},
+  {id:'army', t:'Savaş Odası + 4 asker',        ok:()=>blds.some(b=>b.team===PLAYER&&b.type==='barracks'&&b.built>=1)&&units.filter(u=>u.team===PLAYER&&!u.d.work&&u.type!=='queen').length>=4}
+];
 
 // ------------------------------------------------------------ koordinat
 const w2t=(px,py)=>({x:Math.floor((px/cam.z+cam.x)/TS), y:Math.floor((py/cam.z+cam.y)/TS)});
@@ -54,8 +72,29 @@ function inputInit(){
 }
 function onLeftUp(e){
   mouse.down=false;
-  if(buildMode){ placeBuilding(); mouse.drag=false; return; }
+  if(buildMode){
+    // duvar: sürükleyerek sıra sıra ör (AoE duvar çizimi)
+    if(BLDS[buildMode].solid && mouse.drag){ placeWallLine(e); mouse.drag=false; return; }
+    placeBuilding(); mouse.drag=false; return;
+  }
   if(foundMode){ foundNest(); mouse.drag=false; return; }
+  // çift tık: ekrandaki aynı kasttan hepsini seç
+  if(!mouse.drag){
+    const now=performance.now();
+    const dbl=(now-(mouse.lastClick||0)<320)&&Math.hypot(e.clientX-(mouse.lastX||0),e.clientY-(mouse.lastY||0))<12;
+    mouse.lastClick=now; mouse.lastX=e.clientX; mouse.lastY=e.clientY;
+    if(dbl){
+      const w0=w2w(e.clientX,e.clientY);
+      const hit0=units.find(u=>u.team===PLAYER&&Math.hypot(u.x-w0.x,u.y-w0.y)<0.8);
+      if(hit0){
+        const a0=w2w(0,0), b0=w2w(cv.width,cv.height);
+        sel=units.filter(u=>u.team===PLAYER&&u.type===hit0.type&&u.x>=a0.x&&u.x<=b0.x&&u.y>=a0.y&&u.y<=b0.y);
+        selB=null; uiTab='cmd';
+        msg('Ekrandaki tüm '+ANTS[hit0.type].n+' seçildi ('+sel.length+')');
+        refreshUI(); return;
+      }
+    }
+  }
   if(mouse.drag){
     const a=w2w(Math.min(mouse.sx,e.clientX),Math.min(mouse.sy,e.clientY));
     const b=w2w(Math.max(mouse.sx,e.clientX),Math.max(mouse.sy,e.clientY));
@@ -131,6 +170,7 @@ function onKey(e){
   if(k==='f'){ st.speed=st.speed===1?2:(st.speed===2?3:1); msg('Hız ×'+st.speed); return; }
   if(k===' '){ e.preventDefault(); const n=blds.find(b=>b.team===PLAYER&&b.type==='nest'); if(n) centerOn(n.x,n.y); return; }
   if(k==='.'){ selectIdle(); return; }
+  if(e.key==='F1'){ e.preventDefault(); toggleHelp(); return; }
   if(k==='y'){                                   // Kraliçe Odasını seç (çağ yükseltmesi)
     const n=blds.find(b=>b.team===PLAYER&&b.type==='nest');
     if(n){ selB=n; sel=[]; uiTab='tech'; centerOn(n.x,n.y); refreshUI(); msg('Kraliçe Odası — çağ yükseltmeleri'); }
@@ -168,6 +208,11 @@ function camUpdate(dt){
 // ------------------------------------------------------------ komutlar
 function startBuild(type){
   const d=BLDS[type], T=P;
+  if(!sel.some(u=>u.d.work)){                         // kolaylık: işçi seçili değilse biri atanır
+    const w=units.filter(u=>u.team===PLAYER&&u.d.work)
+      .sort((a,b)=>((a.job?1:0)-(b.job?1:0)))[0];
+    if(w){ sel=[w]; selB=null; }
+  }
   if(d.age>T.age){ msg(AGES[d.age-1].n+' çağı gerekli'); return; }
   if(!canPay(PLAYER,d.cost)){ msg('Yetersiz kaynak: '+d.n); return; }
   buildMode=type; foundMode=false; msg(d.n+' — yerleştir (sağ tık iptal)'); refreshUI();
@@ -175,12 +220,33 @@ function startBuild(type){
 function placeBuilding(){
   const d=BLDS[buildMode], t=w2t(mouse.x,mouse.y);
   const tx=t.x-Math.floor(d.w/2), ty=t.y-Math.floor(d.h/2);
-  if(!canPlaceAt(tx,ty,d,PLAYER)){ msg('Buraya kurulamaz — kazılmış, boş ve üsse yakın olmalı'); return; }
+  if(!canPlaceAt(tx,ty,d,PLAYER)){
+    msg(d.needs==='l' ? 'Mantar çiftliği nemli derinlikte olmalı (daha aşağı kaz)'
+                      : 'Buraya kurulamaz — kazılmış, boş ve keşfedilmiş olmalı'); return; }
   if(!canPay(PLAYER,d.cost)){ msg('Yetersiz kaynak'); buildMode=null; return; }
   pay(PLAYER,d.cost);
   const b=mkBld(buildMode,PLAYER,tx,ty,false);
   for(const u of sel) if(u.d.work){ dropJob(u); u.job={k:'build',b}; }
   msg(d.n+' inşaatı başladı');
+  if(!keys['shift']) buildMode=null;
+  refreshUI();
+}
+// duvarı sürükleyerek sıra hâlinde ör
+function placeWallLine(e){
+  const d=BLDS[buildMode];
+  const a=w2t(mouse.sx,mouse.sy), b=w2t(e.clientX,e.clientY);
+  const dx=b.x-a.x, dy=b.y-a.y;
+  const steps=Math.max(Math.abs(dx),Math.abs(dy));
+  let n=0;
+  for(let i=0;i<=steps;i++){
+    const x=Math.round(a.x+dx*(steps?i/steps:0)), y=Math.round(a.y+dy*(steps?i/steps:0));
+    if(!canPlaceAt(x,y,d,PLAYER)||!canPay(PLAYER,d.cost)) continue;
+    pay(PLAYER,d.cost);
+    const bb=mkBld(buildMode,PLAYER,x,y,false);
+    for(const u of sel) if(u.d.work&&!u.job){ u.job={k:'build',b:bb}; }
+    n++;
+  }
+  msg(n?n+' duvar parçası sıraya girdi':'Duvar kurulamadı');
   if(!keys['shift']) buildMode=null;
   refreshUI();
 }
@@ -204,6 +270,7 @@ function research(b,id){
   const tk=TECHS[id];
   if(b.rq){ msg('Bu odada zaten araştırma var'); return; }
   if(!techReady(PLAYER,id)){ msg(tk.agetech?'Önce bir önceki çağ':'Zaten araştırıldı'); return; }
+  if(tk.agetech && !ageReqMet(PLAYER)){ msg('Çağ atlamak için bu çağdan '+AGE_REQ+' oda gerekli ('+ageBuildingsOf(PLAYER)+'/'+AGE_REQ+')'); return; }
   const c=techCost(PLAYER,id);
   if(!canPay(PLAYER,c)){ msg('Yetersiz kaynak: '+tk.n); return; }
   pay(PLAYER,c); b.rq={id,p:0,t:tk.t};
@@ -297,7 +364,20 @@ function refreshUI(){
           off:!ready||poor||selB.rq, act:`research(selB,'${id}')`, tip:tipOf(tk,cost)});
       });
     }
-  } else if(workers.length){
+    // ---- takas odası: her kaynak yiyecek karşılığı alınıp satılır
+    if(selB.d.trade){
+      for(const r of RESL){
+        if(r.k==='f') continue;
+        const rate=marketRate(r.k);
+        c+=btn({n:'Al: 100 '+r.n, cost:'≈'+Math.round(100*rate*1.15)+' 🍃',
+          off:P.res.f<100*rate*1.15, act:`marketBuy('${r.k}',100)`,
+          tip:`<b>100 ${r.n} satın al</b><br>Kur arz-talebe göre değişir; stok azsa pahalanır.`});
+        c+=btn({n:'Sat: 100 '+r.n, cost:'+'+Math.round(100*rate*0.85)+' 🍃',
+          off:P.res[r.k]<100, act:`marketSell('${r.k}',100)`,
+          tip:`<b>100 ${r.n} sat</b><br>Fazlanı yiyeceğe çevirir (%15 komisyon).`});
+      }
+    }
+  } else if(workers.length || sel.length===0){        // inşa menüsü her zaman erişilebilir
     tb+=`<div class="tab ${uiTab==='cmd'?'on':''}" onclick="uiTab='cmd';refreshUI()">Komut</div>`;
     tb+=`<div class="tab ${uiTab==='build'?'on':''}" onclick="uiTab='build';refreshUI()">İnşa (B)</div>`;
     if(uiTab==='build'){
@@ -309,7 +389,14 @@ function refreshUI(){
           sub:locked?`<span class="lock">🔒 ${AGES[d.age-1].n}</span>`:(d.pop?`<span class="c">👥+${d.pop}</span>`:''),
           off:locked||poor, on:buildMode===k, act:`startBuild('${k}')`, tip:tipOf(d,d.cost,'❤'+d.hp+' · '+d.w+'×'+d.h+' kare')});
       }
-    } else c+=cmdButtons();
+    } else if(sel.length) c+=cmdButtons();
+    else {
+      c+=btn({n:'Boş İşçi Bul', key:'.', act:'selectIdle()', tip:'Boştaki ilk işçiye git'});
+      const nn=blds.find(b=>b.team===PLAYER&&b.type==='nest');
+      if(nn) c+=btn({n:'Yuvaya Dön', key:'␣', act:`centerOn(${nn.x},${nn.y})`, tip:'Kamerayı Kraliçe Odasına taşı'});
+      c+=btn({n:'Kraliçe Odası', key:'Y', act:"keys['y']=1;onKey({key:'y',preventDefault(){}})", tip:'Çağ yükseltme paneli'});
+      c+=btn({n:'Yardım', key:'F1', act:'toggleHelp()', tip:'Kontroller ve kurallar'});
+    }
   } else if(sel.length){
     tb+=`<div class="tab on">Komut</div>`;
     c+=cmdButtons();
@@ -349,14 +436,26 @@ function cmdButtons(){
 // ------------------------------------------------------------ HUD
 function hud(dt){
   const T=P, R=T.res;
+  trackIncome(dt);
+  const idleN=units.filter(u=>u.team===PLAYER&&u.d.work&&!u.job).length;
   let s='';
-  for(const r of RESL) s+=`<div class="res" data-tip="${r.n}"><span class="ic">${r.ic}</span><b>${Math.floor(R[r.k])}</b></div>`;
-  s+=`<div class="sep"></div><div class="res">👥 <b>${popOf(PLAYER)}/${popCap(PLAYER)}</b></div>`;
-  s+=`<div class="sep"></div><div id="ageBox">${AGES[T.age-1].n}</div>`;
+  for(const r of RESL){
+    const rate=incRate[r.k]||0;
+    s+=`<div class="res" data-tip="${r.n} — dakikada ~${Math.round(rate)}">
+      <span class="ic">${r.ic}</span><b>${Math.floor(R[r.k])}</b>
+      <span style="font-size:11px;opacity:.6">${rate>0.5?'+'+Math.round(rate):''}</span></div>`;
+  }
+  const popFull=popOf(PLAYER)>=popCap(PLAYER);
+  s+=`<div class="sep"></div><div class="res" data-tip="Nüfus — dolduğunda Yavru Odacığı kur">👥
+     <b style="color:${popFull?'#e4645a':'#ffd98a'}">${popOf(PLAYER)}/${popCap(PLAYER)}</b></div>`;
+  s+=`<div class="sep"></div><div class="res idlebtn" onclick="selectIdle()" data-tip="Boş işçiye git (.)"
+      style="cursor:pointer;color:${idleN?'#ffd98a':'#7d6f5d'}">💤 <b>${idleN}</b></div>`;
+  s+=`<div class="sep"></div><div id="ageBox" data-tip="Çağ atlamak için bu çağdan ${AGE_REQ} oda gerekli (${ageBuildingsOf(PLAYER)}/${AGE_REQ}) — Y tuşu">${AGES[T.age-1].n}</div>`;
   s+=`<div class="sep"></div><div class="res">⏱ <b>${fmtT(st.time)}</b></div>`;
   const ic=isNight()?'🌙':'☀';
-  s+=`<div class="sep"></div><div id="envBox">${ic} ${isWinter()?'❄ Kış':'🍀 '+(isNight()?'Gece':'Gündüz')}${env.rain>0?' · 🌧 Yağmur':''}</div>`;
+  s+=`<div class="sep"></div><div id="envBox">${ic} ${isWinter()?'❄ Kış':(isNight()?'Gece':'Gündüz')}${env.rain>0?' · 🌧':''}</div>`;
   s+=`<div class="sep"></div><div id="envBox">⚔ Dalga ${ai.wave}</div>`;
+  s+=`<div class="sep"></div><div class="res" onclick="toggleHelp()" style="cursor:pointer" data-tip="Yardım (F1)">❔</div>`;
   if(st.paused) s+=`<div class="sep"></div><div style="color:#ffd98a">⏸ DURAKLATILDI</div>`;
   $('top').innerHTML=s;
 
@@ -370,8 +469,23 @@ function hud(dt){
   let a='';
   for(let i=alerts.length-1;i>=0;i--){ alerts[i].life-=dt;
     if(alerts[i].life<=0){ alerts.splice(i,1); continue; } }
-  for(const al of alerts) a+=`<div class="alert ${al.cls}">${al.t}</div>`;
+  alerts.forEach((al,i)=>{ a+=`<div class="alert ${al.cls}" ${al.x!==undefined?`onclick="jumpAlert(${i})" style="cursor:pointer" title="Tıkla: olay yerine git"`:''}>${al.t}</div>`; });
   $('alerts').innerHTML=a;
+
+  // --- hedef listesi (ilk oyunu kolaylaştırır)
+  if(!st.goalsDone){
+    let g='<div style="font-size:11px;letter-spacing:.1em;opacity:.6;margin-bottom:3px">HEDEFLER</div>';
+    let all=true;
+    for(const go of GOALS){
+      const ok=go.ok();
+      if(!ok) all=false;
+      g+=`<div style="color:${ok?'#8fc45a':'#c9b894'};font-size:12.5px;line-height:1.5">${ok?'✔':'○'} ${go.t}</div>`;
+    }
+    if(all){ st.goalsDone=1; addAlert('Tüm başlangıç hedefleri tamam — artık kendi planın','ok'); }
+    $('goals').innerHTML=g;
+    $('goals').style.display='block';
+  } else $('goals').style.display='none';
 
   if(msgT>0){ msgT-=dt; if(msgT<=0) $('msg').textContent=''; }
 }
+function toggleHelp(){ const h=$('intro'); h.style.display = (h.style.display==='none'||!h.style.display)?'flex':'none'; }

@@ -565,6 +565,29 @@ function drawBld(b,sx,sy,S){
         ctx.beginPath(); ctx.arc(0,-H*0.3,i*3.6*s,0,7); ctx.stroke(); }
       ctx.globalAlpha=b.built<1?0.45+b.built*0.5:1;
       break;
+    case 'house': {                                   // yavru odacığı (ev)
+      ctx.fillStyle='#f3e6c0';
+      for(let i=0;i<4;i++){ ctx.beginPath();
+        ctx.ellipse(-W*0.22+(i%2)*W*0.44, -H*0.14+Math.floor(i/2)*H*0.3, 3.4*s,4.6*s,.2,0,7); ctx.fill(); }
+      ctx.strokeStyle='rgba(200,170,120,.5)'; ctx.lineWidth=1*s;
+      ctx.beginPath(); ctx.ellipse(0,0,W*0.36,H*0.34,0,0,7); ctx.stroke();
+      break; }
+    case 'wall': {                                    // toprak duvar
+      const g2=ctx.createLinearGradient(-W*0.5,0,W*0.5,0);
+      g2.addColorStop(0,pc?'#6a5330':'#6a3a30'); g2.addColorStop(0.5,pc?'#917244':'#91503f');
+      g2.addColorStop(1,pc?'#6a5330':'#6a3a30');
+      ctx.fillStyle=g2; ctx.fillRect(-W*0.5,-H*0.5,W,H);
+      ctx.strokeStyle='rgba(0,0,0,.35)'; ctx.lineWidth=1*s;
+      for(let i=-1;i<2;i++){ ctx.beginPath(); ctx.moveTo(-W*0.5,i*H*0.3); ctx.lineTo(W*0.5,i*H*0.3); ctx.stroke(); }
+      ctx.fillStyle='rgba(255,220,170,.12)'; ctx.fillRect(-W*0.5,-H*0.5,W,2*s);
+      break; }
+    case 'market': {                                  // takas odası
+      ctx.fillStyle=pc?'#d8a24a':'#d87a4a';
+      ctx.beginPath(); ctx.moveTo(-W*0.3,H*0.2); ctx.lineTo(0,-H*0.3); ctx.lineTo(W*0.3,H*0.2); ctx.closePath(); ctx.fill();
+      ctx.fillStyle='#8fc45a'; ctx.beginPath(); ctx.ellipse(-W*0.2,H*0.26,3.4*s,2.2*s,0,0,7); ctx.fill();
+      ctx.fillStyle='#79c6e8'; ctx.beginPath(); ctx.ellipse(0,H*0.3,3*s,2*s,0,0,7); ctx.fill();
+      ctx.fillStyle='#e8b44a'; ctx.beginPath(); ctx.ellipse(W*0.2,H*0.26,3.2*s,2.1*s,0,0,7); ctx.fill();
+      break; }
     case 'cistern': {
       const lvl=0.55+0.08*Math.sin(st.time*1.2);
       ctx.fillStyle='rgba(50,110,150,.85)'; ctx.fillRect(-W*0.32,H*0.32-H*0.62*lvl,W*0.64,H*0.62*lvl);
@@ -594,6 +617,22 @@ function drawBld(b,sx,sy,S){
 }
 
 // ------------------------------------------------------------ KARINCA (anatomik)
+const antGrad=new Map();
+function antGradients(u,r,body,light,dark,gx,gw,gh,hx,hs){
+  const key=u.type+'_'+u.team+'_'+r.toFixed(2);
+  let g=antGrad.get(key);
+  if(!g){
+    const gaster=ctx.createRadialGradient(gx-gw*0.3,-gh*0.35,0,gx,0,gw*1.2);
+    gaster.addColorStop(0,light); gaster.addColorStop(0.55,body); gaster.addColorStop(1,dark);
+    const thorax=ctx.createLinearGradient(0,-r*0.4,0,r*0.4);
+    thorax.addColorStop(0,light); thorax.addColorStop(1,dark);
+    const head=ctx.createRadialGradient(hx+r*0.1,-r*0.12,0,hx,0,r*0.55*hs);
+    head.addColorStop(0,light); head.addColorStop(1,body);
+    g={gaster,thorax,head}; antGrad.set(key,g);
+    if(antGrad.size>400) antGrad.clear();
+  }
+  return g;
+}
 function drawAnt(u,X,Y,S){
   const z=S/16, r=u.d.r*z*0.95;
   const body=u.team===PLAYER?u.d.col:enemyCol(u.d.col);
@@ -628,9 +667,8 @@ function drawAnt(u,X,Y,S){
   // ---- karın (gaster)
   const abd=(u.type==='queen')?1.6:(u.type==='princess'?1.4:(u.type==='major'||u.type==='doorhead'?0.95:1));
   const gx=-r*1.02, gw=r*0.8*abd, gh=r*0.62*abd;
-  let g=ctx.createRadialGradient(gx-gw*0.3,-gh*0.35,0,gx,0,gw*1.2);
-  g.addColorStop(0,light); g.addColorStop(0.55,body); g.addColorStop(1,dark);
-  ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(gx,0,gw,gh,0,0,7); ctx.fill();
+  const AG=antGradients(u,r,body,light,dark,gx,gw,gh,r*0.8,(u.type==='major'||u.type==='doorhead')?1.55:(u.type==='bullet'?1.22:1));
+  ctx.fillStyle=AG.gaster; ctx.beginPath(); ctx.ellipse(gx,0,gw,gh,0,0,7); ctx.fill();
   ctx.strokeStyle='rgba(0,0,0,.28)'; ctx.lineWidth=Math.max(0.8,0.6*z);
   for(let k=1;k<=2;k++){ ctx.beginPath();
     ctx.ellipse(gx+gw*0.1*k,0,gw*(1-0.22*k),gh*(1-0.12*k),0,-1.15,1.15); ctx.stroke(); }
@@ -641,15 +679,11 @@ function drawAnt(u,X,Y,S){
   ctx.beginPath(); ctx.arc(-r*0.46,0,r*0.13,0,7); ctx.fill();
   ctx.beginPath(); ctx.arc(-r*0.3,0,r*0.11,0,7); ctx.fill();
   // ---- göğüs (mezosoma)
-  g=ctx.createLinearGradient(0,-r*0.4,0,r*0.4);
-  g.addColorStop(0,light); g.addColorStop(1,dark);
-  ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(r*0.02,0,r*0.5,r*0.4,0,0,7); ctx.fill();
+  ctx.fillStyle=AG.thorax; ctx.beginPath(); ctx.ellipse(r*0.02,0,r*0.5,r*0.4,0,0,7); ctx.fill();
   // ---- kafa
   const hs=(u.type==='major'||u.type==='doorhead')?1.55:(u.type==='bullet'?1.22:1);
   const hx=r*0.8;
-  g=ctx.createRadialGradient(hx+r*0.1,-r*0.12,0,hx,0,r*0.55*hs);
-  g.addColorStop(0,light); g.addColorStop(1,body);
-  ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(hx,0,r*0.44*hs,r*0.4*hs,0,0,7); ctx.fill();
+  ctx.fillStyle=AG.head; ctx.beginPath(); ctx.ellipse(hx,0,r*0.44*hs,r*0.4*hs,0,0,7); ctx.fill();
   if(u.type==='doorhead'){ ctx.fillStyle=shade(body,0.3);
     ctx.beginPath(); ctx.ellipse(hx+r*0.3,0,r*0.3,r*0.58,0,0,7); ctx.fill();
     ctx.strokeStyle='rgba(0,0,0,.3)'; ctx.lineWidth=0.8*z;

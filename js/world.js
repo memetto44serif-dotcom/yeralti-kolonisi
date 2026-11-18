@@ -23,7 +23,7 @@ function walk(x,y){ if(!inB(x,y))return false; const t=tiles[ti(x,y)];
   return t===T_TUN||t===T_OPEN||t===T_WATER; }
 function diggable(t){ return t===T_SOIL||t===T_VEIN||t===T_ROOT||t===T_CLAY; }
 function digTime(t){ return t===T_CLAY?2.4:(t===T_VEIN?2.0:(t===T_ROOT?1.9:1.45)); }
-function digYield(t){ return t===T_VEIN?{m:12}:(t===T_ROOT?{m:1,l:6}:{m:3}); }
+function digYield(t){ return t===T_VEIN?{m:12}:(t===T_ROOT?{m:1,l:11}:{m:3}); }
 
 // ------------------------------------------------------------ ÜRETİM
 function genWorld(){
@@ -133,8 +133,11 @@ function pfInit(){ pfPrev=new Int32Array(MW*MH); pfSeen=new Int32Array(MW*MH); p
 // kapılar: kendi takımının kapısı geçilir, düşmanınki engeldir
 function passable(x,y,team){
   if(!walk(x,y)) return false;
-  const g=gateAt(x,y);
-  if(g && g.team!==team && g.hp>0) return false;
+  const b=bldAt(x,y);
+  if(b && b.hp>0 && b.built>=1){
+    if(b.d.solid) return false;                  // duvar: kimse geçemez
+    if(b.d.gate && b.team!==team) return false;  // kapı: yalnız sahibi geçer
+  }
   return true;
 }
 function findPath(sx,sy,gx,gy,adj,team){
