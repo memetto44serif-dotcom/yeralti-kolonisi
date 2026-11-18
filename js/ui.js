@@ -5,7 +5,27 @@
 
 let sel=[], selB=null, buildMode=null, foundMode=false, uiTab='cmd';
 let groups={}, alerts=[], msgT=0;
-let panning=false, panX=0, panY=0, touchpadZoom=false, edgeScroll=false;
+let panning=false, panX=0, panY=0, edgeScroll=false;
+// 'auto' | 'mouse' | 'pad' — tekerleğin ne yapacağını belirler
+let inputMode = localStorage.getItem('kar_input') || 'auto';
+function setInputMode(m){ inputMode=m; localStorage.setItem('kar_input',m);
+  msg(m==='mouse'?'Fare modu: tekerlek = zoom':(m==='pad'?'Touchpad modu: iki parmak = kaydırma, pinch = zoom':'Otomatik mod')); }
+// fare tekerleği: büyük, tam sayı adımlar ve yatay kayma yok
+function looksLikeMouseWheel(e){
+  if(e.deltaMode===1 || e.deltaMode===2) return true;            // satır/sayfa adımı → fare
+  if(Math.abs(e.deltaX)>0.5) return false;                       // yatay kayma → touchpad
+  const ay=Math.abs(e.deltaY);
+  if(ay>=100 && Math.abs(ay-Math.round(ay))<0.01) return true;   // 100/120 gibi tam adımlar → fare
+  if(ay<40) return false;                                        // küçük/ince adımlar → touchpad
+  return true;
+}
+function zoomAt(px,py,f){
+  const b=w2w(px,py);
+  cam.z=clamp(cam.z*f,0.45,2.8);
+  const a=w2w(px,py);
+  cam.x+=(b.x-a.x)*TS; cam.y+=(b.y-a.y)*TS; clampCam();
+}
+function zoomStep(f){ zoomAt(cv.width/2, cv.height/2, f); }
 let mouse={x:0,y:0,sx:0,sy:0,rsx:0,rsy:0,down:false,rdown:false,drag:false,rdrag:false};
 const keys={};
 const TRAINK=['Q','W','E','R','T'], TECHK=['Z','X','C','V'];
@@ -56,15 +76,16 @@ function inputInit(){
       else onLeftUp(e); }
     else if(e.button===2) onRightUp(e); });
   cv.addEventListener('wheel',e=>{ e.preventDefault();
-    if(e.ctrlKey || e.metaKey || touchpadZoom){          // pinch ya da Ctrl+tekerlek → yakınlaş
-      const b=w2w(e.clientX,e.clientY);
-      cam.z=clamp(cam.z*(e.deltaY<0?1.1:0.91),0.45,2.8);
-      const a=w2w(e.clientX,e.clientY);
-      cam.x+=(b.x-a.x)*TS; cam.y+=(b.y-a.y)*TS;
-    } else {                                              // iki parmak kaydırma → kamerayı sürükle
-      cam.x+=e.deltaX/cam.z; cam.y+=e.deltaY/cam.z;
+    // pinch (ctrl+wheel) her zaman zoom
+    let zoom = e.ctrlKey || e.metaKey;
+    if(!zoom){
+      if(inputMode==='mouse') zoom=true;                  // kullanıcı fare seçtiyse tekerlek = zoom
+      else if(inputMode==='pad') zoom=false;              // touchpad seçtiyse tekerlek = kaydırma
+      else zoom = looksLikeMouseWheel(e);                 // otomatik algıla
     }
-    clampCam(); },{passive:false});
+    if(zoom) zoomAt(e.clientX,e.clientY,e.deltaY<0?1.1:0.91);
+    else { cam.x+=e.deltaX/cam.z; cam.y+=e.deltaY/cam.z; clampCam(); }
+  },{passive:false});
   // orta tuş ya da boşluk ile sürükleyerek kamera taşıma
   cv.addEventListener('mousedown',e=>{ if(e.button===1){ e.preventDefault(); panning=true; panX=e.clientX; panY=e.clientY; } });
   addEventListener('mouseup',e=>{ if(e.button===1) panning=false; });
@@ -189,6 +210,8 @@ function onKey(e){
   if(k==='f'){ st.speed=st.speed===1?2:(st.speed===2?3:1); msg('Hız ×'+st.speed); return; }
   if(k===' '){ e.preventDefault(); const n=blds.find(b=>b.team===PLAYER&&b.type==='nest'); if(n) centerOn(n.x,n.y); return; }
   if(k==='.'){ selectIdle(); return; }
+  if(k==='+'||k==='='){ zoomStep(1.15); return; }
+  if(k==='-'||k==='_'){ zoomStep(0.87); return; }
   if(e.key==='F1'){ e.preventDefault(); toggleHelp(); return; }
   if(k==='y'){                                   // Kraliçe Odasını seç (çağ yükseltmesi)
     const n=blds.find(b=>b.team===PLAYER&&b.type==='nest');
@@ -475,6 +498,12 @@ function hud(dt){
   s+=`<div class="sep"></div><div id="envBox">${ic} ${isWinter()?'❄ Kış':(isNight()?'Gece':'Gündüz')}${env.rain>0?' · 🌧':''}</div>`;
   s+=`<div class="sep"></div><div id="envBox">⚔ Dalga ${ai.wave}</div>`;
   s+=`<div class="sep"></div><div class="res" onclick="toggleHelp()" style="cursor:pointer" data-tip="Yardım (F1)">❔</div>`;
+  s+=`<div class="sep"></div>
+    <div class="res" data-tip="Yakınlaştır (+ tuşu)" onclick="zoomStep(1.15)" style="cursor:pointer">+</div>
+    <div class="res" data-tip="Uzaklaştır (- tuşu)" onclick="zoomStep(0.87)" style="cursor:pointer">−</div>
+    <div class="res" style="cursor:pointer;color:${inputMode==='pad'?'#9fd07a':(inputMode==='mouse'?'#ffd98a':'#b3a189')}"
+      data-tip="Tekerleğin görevi:<br><b>Fare</b> = tekerlek yakınlaştırır<br><b>Touchpad</b> = iki parmak kaydırır, pinch yakınlaştırır<br><b>Oto</b> = kendiliğinden algılar<br>Tıkla: değiştir"
+      onclick="setInputMode(inputMode==='auto'?'mouse':(inputMode==='mouse'?'pad':'auto'))">${inputMode==='pad'?'Touchpad':(inputMode==='mouse'?'Fare':'Oto')}</div>`;
   if(st.paused) s+=`<div class="sep"></div><div style="color:#ffd98a">⏸ DURAKLATILDI</div>`;
   $('top').innerHTML=s;
 
