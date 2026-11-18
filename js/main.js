@@ -46,6 +46,7 @@ function initGame(){
   updateFog(1); refreshUI();
   addAlert('Koloni kuruldu — tünel kaz ve oda inşa et','ok');
   msg('Toprağa sağ tıklayarak kazmaya başla · B ile oda kur');
+  if(window.TUT) TUT.start();
 }
 
 function loop(now){
@@ -54,6 +55,7 @@ function loop(now){
   if(started){
     camUpdate(dt);
     if(!st.paused&&!st.over) for(let i=0;i<st.speed;i++) simulate(dt);
+    if(window.TUT){ TUT.update(dt); if(TUT.on) TUT.camMoved=(TUT.camMoved||0)+(Math.abs(cam.x-(TUT.lastCx||cam.x))+Math.abs(cam.y-(TUT.lastCy||cam.y)))/50; TUT.lastCx=cam.x; TUT.lastCy=cam.y; }
     draw(); hud(dt);
     uiT-=dt; if(uiT<=0){ uiT=0.4; refreshUI(); }
   }

@@ -54,6 +54,18 @@
     padding:4px 6px;cursor:pointer;text-align:left}
   .mini-btn:hover{background:#44301b}
   .mini-btn.on{border-color:#ffd98a;color:#ffd98a}
+  /* ---------- eğitim ---------- */
+  #tut{top:150px;left:50%;transform:translateX(-50%);width:430px;padding:14px 16px;
+    border-color:#b98a46;box-shadow:0 10px 40px rgba(0,0,0,.6)}
+  .tut-head{font-size:17px;color:#ffd98a;font-weight:600;margin-bottom:7px;display:flex;justify-content:space-between}
+  .tut-prog{font-size:12px;opacity:.6;font-weight:400}
+  .tut-body{font-size:13.5px;line-height:1.62;color:#e9dcc2}
+  .tut-goal{margin-top:9px;padding:6px 9px;background:rgba(143,196,90,.12);border-left:3px solid #8fc45a;
+    border-radius:0 4px 4px 0;font-size:13px;color:#cfe8a8}
+  .tut-row{display:flex;gap:7px;margin-top:11px;justify-content:flex-end}
+  .tut-btn{background:#6b4e2b;border:0;border-radius:5px;color:#fff;padding:6px 14px;font-size:13px;cursor:pointer}
+  .tut-btn:hover{background:#8a6436}
+  .tut-btn.ghost{background:#2c2014;border:1px solid #6b4e2b;color:#c9b894}
   #goals{top:140px;left:6px;padding:8px 11px;width:210px;font-size:12.5px;line-height:1.5}
   #queue{position:absolute;bottom:158px;left:6px;display:flex;gap:3px;flex-wrap:wrap;max-width:60vw}
   .qi{width:38px;height:38px;background:rgba(24,17,10,.92);border:1px solid #6b4e2b;border-radius:4px;
@@ -90,6 +102,7 @@
   <div id="msg"></div>
   <div id="queue"></div>
   <div class="panel" id="goals"></div>
+  <div class="panel" id="tut" style="display:none"></div>
   <div class="panel" id="bottom">
     <div id="info"></div>
     <div id="center"><div id="tabs"></div><div id="cmds"></div></div>
@@ -112,7 +125,7 @@
     <kbd>Sol tık / sürükle</kbd> seç &nbsp; <kbd>Sağ tık</kbd> git · saldır · <b>toprağa = kaz</b> · kaynağa = topla<br>
     <kbd>Sağ tık sürükle</kbd> alan kazma emri &nbsp; <kbd>B</kbd> inşa menüsü &nbsp;
     <kbd>Y</kbd> Kraliçe Odası (çağ) &nbsp; <kbd>F1</kbd> yardım &nbsp; <kbd>Çift tık</kbd> aynı tipten hepsini seç &nbsp; <kbd>Ctrl+1–9</kbd> grup kur · <kbd>1–9</kbd> grubu çağır<br>
-    <kbd>WASD</kbd>/kenar kamera · <kbd>Tekerlek</kbd> zoom · <kbd>Boşluk</kbd> yuva ·
+    <kbd>WASD</kbd> veya <b>iki parmak kaydırma</b> kamera · <kbd>Ctrl+tekerlek / pinch</kbd> zoom · <kbd>Ctrl+sol tık</kbd> = sağ tık · <kbd>Boşluk</kbd> yuva ·
     <kbd>.</kbd> boş işçi · <kbd>Ctrl+A</kbd> tüm ordu · <kbd>F</kbd> hız · <kbd>P</kbd> duraklat
   </p>
   <p style="color:#9fd07a;margin:6px 0 0">İşçiler boş kaldığında kazma, inşa ve toplama işlerini kendileri üstlenir.
@@ -132,6 +145,7 @@
 <script src="js/ai.js"></script>
 <script src="js/render.js"></script>
 <script src="js/ui.js"></script>
+<script src="js/tutorial.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

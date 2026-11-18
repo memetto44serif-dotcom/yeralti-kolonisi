@@ -5,6 +5,7 @@
 
 let sel=[], selB=null, buildMode=null, foundMode=false, uiTab='cmd';
 let groups={}, alerts=[], msgT=0;
+let panning=false, panX=0, panY=0, touchpadZoom=false, edgeScroll=false;
 let mouse={x:0,y:0,sx:0,sy:0,rsx:0,rsy:0,down:false,rdown:false,drag:false,rdrag:false};
 const keys={};
 const TRAINK=['Q','W','E','R','T'], TECHK=['Z','X','C','V'];
@@ -49,12 +50,30 @@ function inputInit(){
   cv.addEventListener('mousedown',e=>{
     if(e.button===0){ mouse.down=true; mouse.drag=false; mouse.sx=e.clientX; mouse.sy=e.clientY; }
     if(e.button===2){ mouse.rdown=true; mouse.rdrag=false; mouse.rsx=e.clientX; mouse.rsy=e.clientY; } });
-  cv.addEventListener('mouseup',e=>{ e.button===0?onLeftUp(e):(e.button===2?onRightUp(e):0); });
+  cv.addEventListener('mouseup',e=>{
+    if(e.button===0){ if(e.ctrlKey||e.metaKey){ mouse.rdown=mouse.down; mouse.rsx=mouse.sx; mouse.rsy=mouse.sy;
+        mouse.rdrag=mouse.drag; mouse.down=false; mouse.drag=false; onRightUp(e); }
+      else onLeftUp(e); }
+    else if(e.button===2) onRightUp(e); });
   cv.addEventListener('wheel',e=>{ e.preventDefault();
-    const b=w2w(e.clientX,e.clientY);
-    cam.z=clamp(cam.z*(e.deltaY<0?1.12:0.89),0.45,2.8);
-    const a=w2w(e.clientX,e.clientY);
-    cam.x+=(b.x-a.x)*TS; cam.y+=(b.y-a.y)*TS; clampCam(); },{passive:false});
+    if(e.ctrlKey || e.metaKey || touchpadZoom){          // pinch ya da Ctrl+tekerlek → yakınlaş
+      const b=w2w(e.clientX,e.clientY);
+      cam.z=clamp(cam.z*(e.deltaY<0?1.1:0.91),0.45,2.8);
+      const a=w2w(e.clientX,e.clientY);
+      cam.x+=(b.x-a.x)*TS; cam.y+=(b.y-a.y)*TS;
+    } else {                                              // iki parmak kaydırma → kamerayı sürükle
+      cam.x+=e.deltaX/cam.z; cam.y+=e.deltaY/cam.z;
+    }
+    clampCam(); },{passive:false});
+  // orta tuş ya da boşluk ile sürükleyerek kamera taşıma
+  cv.addEventListener('mousedown',e=>{ if(e.button===1){ e.preventDefault(); panning=true; panX=e.clientX; panY=e.clientY; } });
+  addEventListener('mouseup',e=>{ if(e.button===1) panning=false; });
+  addEventListener('mousemove',e=>{
+    if(panning||(keys[' ']&&mouse.down)){
+      cam.x-=(e.clientX-panX)/cam.z; cam.y-=(e.clientY-panY)/cam.z; clampCam();
+    }
+    panX=e.clientX; panY=e.clientY;
+  });
   mm.addEventListener('mousedown',e=>{ const r=mm.getBoundingClientRect();
     centerOn((e.clientX-r.left)/mm.width*MW,(e.clientY-r.top)/mm.height*MH); });
   addEventListener('keydown',onKey);
